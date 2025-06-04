@@ -13,7 +13,7 @@ export const createCheckoutSession = async (req, res) => {
 		let totalAmount = 0;
 
 		const lineItems = products.map((product) => {
-			const amount = Math.round(product.price * 100); // stripe wants u to send in the format of cents
+			const amount = Math.round(product.price * 100); // Convert dollars to cents
 			totalAmount += amount * product.quantity;
 
 			return {
@@ -41,8 +41,8 @@ export const createCheckoutSession = async (req, res) => {
 			payment_method_types: ["card"],
 			line_items: lineItems,
 			mode: "payment",
-			success_url: `${process.env.CLIENT_URL}/purchase-success?session_id={CHECKOUT_SESSION_ID}`,
-			cancel_url: `${process.env.CLIENT_URL}/purchase-cancel`,
+			success_url: `${process.env.FRONTEND_URL}/purchase-success?session_id={CHECKOUT_SESSION_ID}`,
+			cancel_url: `${process.env.FRONTEND_URL}/purchase-cancel`,
 			discounts: coupon
 				? [
 						{
@@ -66,7 +66,8 @@ export const createCheckoutSession = async (req, res) => {
 		if (totalAmount >= 20000) {
 			await createNewCoupon(req.user._id);
 		}
-		res.status(200).json({ id: session.id, totalAmount: totalAmount / 100 });
+
+		res.status(200).json({ sessionId: session.id }); // ✅ Use `url` for Stripe redirection
 	} catch (error) {
 		console.error("Error processing checkout:", error);
 		res.status(500).json({ message: "Error processing checkout", error: error.message });
@@ -85,14 +86,12 @@ export const checkoutSuccess = async (req, res) => {
 						code: session.metadata.couponCode,
 						userId: session.metadata.userId,
 					},
-					{
-						isActive: false,
-					}
+					{ isActive: false }
 				);
 			}
 
-			// create a new Order
 			const products = JSON.parse(session.metadata.products);
+
 			const newOrder = new Order({
 				user: session.metadata.userId,
 				products: products.map((product) => ({
@@ -100,7 +99,7 @@ export const checkoutSuccess = async (req, res) => {
 					quantity: product.quantity,
 					price: product.price,
 				})),
-				totalAmount: session.amount_total / 100, // convert from cents to dollars,
+				totalAmount: session.amount_total / 100,
 				stripeSessionId: sessionId,
 			});
 
@@ -111,6 +110,8 @@ export const checkoutSuccess = async (req, res) => {
 				message: "Payment successful, order created, and coupon deactivated if used.",
 				orderId: newOrder._id,
 			});
+		} else {
+			res.status(400).json({ message: "Payment not completed." });
 		}
 	} catch (error) {
 		console.error("Error processing successful checkout:", error);
@@ -123,7 +124,6 @@ async function createStripeCoupon(discountPercentage) {
 		percent_off: discountPercentage,
 		duration: "once",
 	});
-
 	return coupon.id;
 }
 
@@ -134,10 +134,9 @@ async function createNewCoupon(userId) {
 		code: "GIFT" + Math.random().toString(36).substring(2, 8).toUpperCase(),
 		discountPercentage: 10,
 		expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-		userId: userId,
+		userId,
 	});
 
 	await newCoupon.save();
-
 	return newCoupon;
 }
