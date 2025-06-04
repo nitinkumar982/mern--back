@@ -1,14 +1,12 @@
 import Stripe from "stripe";
 import express from "express";
 const router = express.Router();
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY); // ✅
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 router.post("/create-checkout-session", async (req, res) => {
   try {
     const { products } = req.body;
 
-    // ✅ Ensure products is an array
     if (!Array.isArray(products)) {
       return res.status(400).json({ error: "Invalid products format" });
     }
@@ -20,7 +18,7 @@ router.post("/create-checkout-session", async (req, res) => {
           name: product.name,
           images: [product.image],
         },
-        unit_amount: product.price * 100, // ✅ Stripe expects price in paisa
+        unit_amount: product.price * 100,
       },
       quantity: product.quantity || 1,
     }));
@@ -29,11 +27,11 @@ router.post("/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       mode: "payment",
       line_items,
-      success_url: "http://localhost:5000/purchase-success",
-      cancel_url: "http://localhost:5000/purchase-cancel",
+      success_url: `${process.env.FRONTEND_URL}/purchase-success`,
+      cancel_url: `${process.env.FRONTEND_URL}/purchase-cancel`,
     });
 
-    console.log("Stripe session URL:", session.url); // ✅ Must log a valid URL
+    console.log("Stripe session URL:", session.url);
     res.json({ url: session.url });
   } catch (err) {
     console.error("Stripe error:", err);
